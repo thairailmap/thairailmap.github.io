@@ -1,0 +1,946 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>แผนที่รถไฟไทย</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: full-bleed schematic map (drawn to true rail distance) with a control rail on the left; bottom sheet on phones. */
+:root {
+  --paper: #FAFAF7;
+  --panel: #FFFFFF;
+  --ink: #16191F;
+  --muted: #5E6470;
+  --rule: #E3E3DC;
+  --accent: #1D3E8F;
+  --halo: rgba(250,250,247,0.92);
+  --font: "IBM Plex Sans Thai", "Noto Sans Thai", "Leelawadee UI", Tahoma, system-ui, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #12151B; --panel: #1A1E26; --ink: #ECEDEF; --muted: #A2A8B4; --rule: #2C313C;
+    --accent: #8FB0FF; --halo: rgba(18,21,27,0.9); color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #12151B; --panel: #1A1E26; --ink: #ECEDEF; --muted: #A2A8B4; --rule: #2C313C;
+  --accent: #8FB0FF; --halo: rgba(18,21,27,0.9); color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--paper); color: var(--ink); font-family: var(--font); font-size: 14px; line-height: 1.45; display: grid; grid-template-columns: 372px 1fr; overflow: hidden; }
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Panel */
+#panel { background: var(--panel); border-right: 1px solid var(--rule); overflow-y: auto; display: flex; flex-direction: column; gap: 18px; padding: 18px 18px 28px; z-index: 3; }
+.handle { display: none; }
+.top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.brand { display: flex; gap: 10px; align-items: center; }
+.brand svg { flex: none; }
+h1 { font-size: 20px; line-height: 1.2; margin: 0; font-weight: 700; text-wrap: balance; letter-spacing: -0.01em; }
+.sub { margin: 2px 0 0; color: var(--muted); font-size: 12.5px; }
+.lang { display: flex; border: 1px solid var(--rule); border-radius: 999px; padding: 2px; flex: none; }
+.lang button { border: 0; background: transparent; padding: 4px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.lang button[aria-pressed="true"] { background: var(--ink); color: var(--panel); }
+h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 0 0 8px; font-weight: 600; }
+section { display: flex; flex-direction: column; }
+.field { position: relative; }
+.field input { width: 100%; border: 1.5px solid var(--rule); background: var(--paper); border-radius: 10px; padding: 9px 12px 9px 34px; outline: none; }
+.field input:focus { border-color: var(--accent); }
+.field .ico { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; color: var(--muted); pointer-events: none; }
+.field .pin { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 11px; height: 11px; border-radius: 50%; border: 2.5px solid var(--ink); background: var(--panel); }
+.field .pin.to { background: var(--ink); }
+.ac { position: absolute; left: 0; right: 0; top: calc(100% + 4px); background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.14); list-style: none; margin: 0; padding: 4px; z-index: 20; max-height: 300px; overflow-y: auto; }
+.ac[hidden] { display: none; }
+.ac li { display: grid; grid-template-columns: 10px 1fr auto; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 7px; cursor: pointer; }
+.ac li.act, .ac li:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.ac small { color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.plan { display: grid; grid-template-columns: 1fr 34px; gap: 6px 8px; align-items: center; }
+.plan .field { grid-column: 1; }
+.swap { grid-column: 2; grid-row: 1 / span 2; width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--rule); background: var(--panel); display: grid; place-items: center; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.chip { border: 1px solid var(--rule); background: var(--paper); border-radius: 999px; padding: 4px 10px; font-size: 12px; }
+.chip:hover { border-color: var(--accent); }
+.hint { color: var(--muted); font-size: 12.5px; margin: 8px 0 0; }
+
+/* Result */
+.result { margin-top: 12px; border: 1px solid var(--rule); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 12px; background: var(--paper); }
+.total { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.total b { font-size: 32px; line-height: 1; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.total span { color: var(--muted); }
+.legs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.leg { display: grid; grid-template-columns: 14px 1fr auto; gap: 0 10px; position: relative; padding-bottom: 10px; }
+.leg .bar { grid-row: 1 / span 2; width: 6px; border-radius: 3px; margin: 4px auto 0; }
+.leg .t { font-weight: 600; }
+.leg .m { color: var(--muted); font-size: 12px; grid-column: 2 / span 2; }
+.leg .k { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+.xfer { font-size: 12px; color: var(--muted); padding: 0 0 10px 24px; }
+.result .row { display: flex; gap: 8px; }
+.btn { border: 1px solid var(--rule); background: var(--panel); border-radius: 8px; padding: 6px 12px; font-size: 12.5px; font-weight: 600; }
+.btn.primary { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+.note { font-size: 12px; color: var(--muted); }
+
+/* Lines list */
+.lines { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.lines label { display: grid; grid-template-columns: 18px 26px 1fr auto; align-items: center; gap: 8px; padding: 6px 4px; border-radius: 8px; cursor: pointer; }
+.lines label:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.lines .sw { height: 6px; border-radius: 3px; }
+.lines .nm { font-weight: 600; }
+.lines .st { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; text-align: right; }
+.lines input, .opts input { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
+.opts { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.opts label { display: flex; gap: 8px; align-items: center; cursor: pointer; }
+.legend { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; font-size: 12.5px; }
+.legend div { display: flex; gap: 8px; align-items: center; }
+.about { font-size: 12px; color: var(--muted); border-top: 1px solid var(--rule); padding-top: 14px; }
+.about p { margin: 0 0 6px; }
+
+/* Map */
+#map { position: relative; overflow: hidden; touch-action: none; }
+#cv { position: absolute; inset: 0; width: 100%; height: 100%; cursor: grab; }
+#cv.drag { cursor: grabbing; }
+.ctrls { position: absolute; right: 16px; top: 16px; display: flex; flex-direction: column; gap: 6px; z-index: 2; }
+.ctrls button { width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--rule); background: var(--panel); display: grid; place-items: center; font-size: 18px; font-weight: 600; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+.ctrls .txt { font-size: 11px; font-weight: 700; }
+.scale { position: absolute; left: 16px; bottom: 16px; font-size: 11.5px; color: var(--ink); background: var(--halo); padding: 6px 10px 6px; border-radius: 8px; z-index: 2; display: flex; flex-direction: column; gap: 4px; }
+.scale .bar { height: 6px; border: 2px solid var(--ink); border-top: 0; }
+.scale small { color: var(--muted); font-size: 10.5px; }
+
+/* Station card */
+#card { position: absolute; right: 70px; top: 16px; width: 330px; max-width: calc(100% - 32px); background: var(--panel); border: 1px solid var(--rule); border-radius: 14px; box-shadow: 0 12px 32px rgba(0,0,0,0.16); z-index: 4; padding: 16px; display: flex; flex-direction: column; gap: 10px; max-height: calc(100% - 32px); overflow-y: auto; }
+#card[hidden] { display: none; }
+#card .hd { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
+#card h3 { margin: 0; font-size: 20px; line-height: 1.2; text-wrap: balance; }
+#card .alt { color: var(--muted); font-size: 13px; }
+#card .x { border: 0; background: transparent; font-size: 20px; line-height: 1; padding: 2px 6px; color: var(--muted); }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.tag { font-size: 11.5px; font-weight: 600; border-radius: 999px; padding: 2px 9px; border: 1.5px solid; }
+.tag.plain { border-color: var(--rule); color: var(--muted); }
+.big { display: flex; align-items: baseline; gap: 6px; }
+.big b { font-size: 26px; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.big span { color: var(--muted); font-size: 12.5px; }
+.rt { border-top: 1px solid var(--rule); padding-top: 8px; display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; }
+.rt .rn { font-weight: 600; display: flex; gap: 6px; align-items: center; }
+.rt .km { color: var(--muted); font-variant-numeric: tabular-nums; }
+.nb { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.nb button { text-align: left; border: 1px solid var(--rule); background: var(--paper); border-radius: 8px; padding: 5px 8px; font-size: 12px; line-height: 1.3; }
+.nb button:disabled { opacity: 0.4; cursor: default; }
+.nb small { display: block; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+@media (max-width: 760px) {
+  body { grid-template-columns: 1fr; }
+  #map { position: fixed; inset: 0; }
+  #panel { position: fixed; left: 0; right: 0; bottom: 0; height: 168px; border-right: 0; border-top: 1px solid var(--rule); border-radius: 18px 18px 0 0; box-shadow: 0 -8px 24px rgba(0,0,0,0.12); padding: 6px 16px 24px; transition: height 0.25s ease; gap: 14px; }
+  #panel.open { height: 78%; }
+  .handle { display: block; border: 0; background: transparent; padding: 8px 0 2px; width: 100%; flex: none; }
+  .handle span { display: block; width: 40px; height: 4px; border-radius: 2px; background: var(--rule); margin: 0 auto; }
+  h1 { font-size: 17px; }
+  .sub { display: none; }
+  #card { left: 16px; right: 16px; width: auto; top: 12px; max-height: calc(100% - 200px); }
+  .ctrls { top: auto; bottom: 184px; right: 12px; }
+  .scale { bottom: 184px; left: 12px; }
+}
+@media (prefers-reduced-motion: reduce) { #panel { transition: none; } }
+</style>
+</head>
+<body>
+<aside id="panel" aria-label="เมนู">
+  <button class="handle" id="handle" aria-label="ขยายเมนู"><span></span></button>
+  <div class="top">
+    <div class="brand">
+      <svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true"><rect x="1" y="1" width="32" height="32" rx="9" fill="#16191F"/><path d="M7 24 L13 18 L13 10" stroke="#D3212D" stroke-width="3.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M13 18 L27 18" stroke="#F08C00" stroke-width="3.2" stroke-linecap="round"/><path d="M13 18 L13 28" stroke="#00915A" stroke-width="3.2" stroke-linecap="round"/><circle cx="13" cy="18" r="3.4" fill="#fff" stroke="#16191F" stroke-width="1.6"/></svg>
+      <div><h1 data-i18n="title"></h1><p class="sub" data-i18n="subtitle"></p></div>
+    </div>
+    <div class="lang" role="group" aria-label="Language">
+      <button data-lang="th" aria-pressed="true">ไทย</button><button data-lang="en" aria-pressed="false">EN</button>
+    </div>
+  </div>
+
+  <div class="field">
+    <svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="7" r="5"/><path d="M11 11l3.5 3.5"/></svg>
+    <input id="q" type="search" autocomplete="off" data-i18n-ph="search">
+  </div>
+
+  <section>
+    <h2 data-i18n="plan"></h2>
+    <div class="plan">
+      <div class="field"><span class="pin"></span><input id="from" autocomplete="off" data-i18n-ph="from"></div>
+      <button class="swap" id="swap" data-i18n-aria="swap"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 2v12M5 14l-3-3M11 14V2M11 2l3 3"/></svg></button>
+      <div class="field"><span class="pin to"></span><input id="to" autocomplete="off" data-i18n-ph="to"></div>
+    </div>
+    <div id="result"></div>
+  </section>
+
+  <section>
+    <h2 data-i18n="lines"></h2>
+    <ul class="lines" id="lines"></ul>
+    <div class="opts">
+      <label><input type="checkbox" id="optH" checked> <span data-i18n="showHalts"></span></label>
+      <label><input type="checkbox" id="optF" checked> <span data-i18n="showFreight"></span></label>
+      <label><input type="checkbox" id="optD" checked> <span data-i18n="showDist"></span></label>
+    </div>
+  </section>
+
+  <section>
+    <h2 data-i18n="legend"></h2>
+    <div class="legend">
+      <div><svg width="26" height="14"><line x1="1" y1="7" x2="25" y2="7" stroke="#D3212D" stroke-width="4"/><line x1="13" y1="7" x2="13" y2="1" stroke="#D3212D" stroke-width="3"/></svg><span data-i18n="lgStation"></span></div>
+      <div><svg width="26" height="14"><line x1="1" y1="7" x2="25" y2="7" stroke="#D3212D" stroke-width="4"/><line x1="13" y1="7" x2="13" y2="3.5" stroke="#D3212D" stroke-width="2"/></svg><span data-i18n="lgHalt"></span></div>
+      <div><svg width="26" height="14"><line x1="1" y1="7" x2="25" y2="7" stroke="#D3212D" stroke-width="4"/><circle cx="13" cy="7" r="4.6" fill="var(--panel)" stroke="var(--ink)" stroke-width="2"/></svg><span data-i18n="lgJunction"></span></div>
+      <div><svg width="26" height="14"><line x1="1" y1="7" x2="25" y2="7" stroke="#0A6EBD" stroke-width="4"/><rect x="9.5" y="0.5" width="7" height="7" fill="var(--panel)" stroke="var(--ink)" stroke-width="1.6"/></svg><span data-i18n="lgFreight"></span></div>
+      <div><svg width="26" height="14"><line x1="1" y1="7" x2="25" y2="7" stroke="#9A6431" stroke-width="3" stroke-dasharray="3 3"/></svg><span data-i18n="lgFerry"></span></div>
+      <div><svg width="34" height="16"><rect x="1" y="1" width="32" height="14" rx="7" fill="var(--panel)" stroke="var(--muted)" stroke-width="1.4"/><text x="17" y="11.5" text-anchor="middle" font-size="8.5" font-weight="700" fill="var(--ink)">km</text></svg><span data-i18n="lgDist"></span></div>
+    </div>
+  </section>
+
+  <div class="about" id="about"></div>
+</aside>
+
+<main id="map">
+  <canvas id="cv" role="img" data-i18n-aria="mapAria"></canvas>
+  <div class="ctrls">
+    <button id="zin" aria-label="Zoom in">+</button>
+    <button id="zout" aria-label="Zoom out">−</button>
+    <button id="fit" class="txt" data-i18n="fitBtn"></button>
+    <button id="bkk" class="txt" data-i18n="bkkBtn"></button>
+  </div>
+  <div class="scale" id="scale"><span id="scaleTxt"></span><div class="bar" id="scaleBar"></div><small data-i18n="scaleNote"></small></div>
+  <div id="card" hidden></div>
+</main>
+
+<script src="data.js"></script>
+<script>
+(() => {
+'use strict';
+/* ---------- i18n ---------- */
+const T = {
+  th: {
+    title: 'แผนที่รถไฟไทย', subtitle: 'รถไฟระหว่างเมือง · วาดตามสัดส่วนระยะทางจริง',
+    search: 'ค้นหาสถานี หรือจังหวัด', plan: 'วางแผนเดินทาง', from: 'สถานีต้นทาง', to: 'สถานีปลายทาง', swap: 'สลับต้นทาง–ปลายทาง',
+    lines: 'สายรถไฟ', showHalts: 'แสดงที่หยุดรถ', showFreight: 'แสดงสถานีสินค้า', showDist: 'แสดงป้ายระยะทางบนแผนที่',
+    legend: 'สัญลักษณ์', lgStation: 'สถานี', lgHalt: 'ที่หยุดรถ', lgJunction: 'ชุมทาง / สถานีร่วม', lgFreight: 'สถานีสินค้า', lgFerry: 'ช่วงข้ามเรือ', lgDist: 'ระยะระหว่างสถานีหลัก',
+    fitBtn: 'ทั้งหมด', bkkBtn: 'กทม.', scaleNote: 'ความยาวเส้นตามระยะทางรถไฟ', mapAria: 'แผนผังเส้นทางรถไฟประเทศไทย',
+    km: 'กม.', stations: 'สถานี', stops: 'สถานีที่ผ่าน', legsN: n => `${n} ช่วง`, change: 'ต่อสายที่', clear: 'ล้างเส้นทาง', zoomRoute: 'ดูบนแผนที่',
+    noPath: 'ไม่มีทางรถไฟเชื่อมระหว่างสองสถานีนี้ (สายแม่กลองแยกจากโครงข่ายหลัก)', same: 'ต้นทางและปลายทางเป็นสถานีเดียวกัน',
+    hintPlan: 'เลือกต้นทางและปลายทาง หรือคลิกสถานีบนแผนที่ แล้วกด “ตั้งเป็นต้นทาง/ปลายทาง” ลองตัวอย่าง:',
+    fromBkk: 'ระยะทางรถไฟจากกรุงเทพ (หัวลำโพง)', notLinked: 'ไม่เชื่อมกับโครงข่ายหลัก', kmPost: 'หลัก กม.', ref: 'อ้างอิง',
+    prev: 'ก่อนหน้า', next: 'ถัดไป', setFrom: 'ตั้งเป็นต้นทาง', setTo: 'ตั้งเป็นปลายทาง', close: 'ปิด', ferry: 'รวมช่วงข้ามเรือ (ไม่นับระยะทาง)',
+    trackKm: 'กม.', viaFerry: 'ข้ามเรือ', province: 'จ.',
+    about: [
+      'ข้อมูล: ทะเบียนสถานีรถไฟระหว่างเมือง (ไฟล์ Thailand_SRT_Stations_by_Region.xlsx) 699 สถานี 24 เส้นทางย่อย ฐานข้อมูลหลักปี 2562 จาก Visitorstothailand ตรวจทานกับ Thai Tracks',
+      'ระยะทางคิดจากหลักกิโลเมตรทางรถไฟ ไม่ใช่ระยะทางถนน แต่ละเส้นทางย่อยใช้จุดอ้างอิงของตัวเอง (หัวลำโพง ธนบุรี วงเวียนใหญ่ บ้านแหลม)',
+      'ความยาวเส้นบนแผนผังเป็นสัดส่วนกับระยะทางรถไฟ ส่วนทิศทางจัดเป็นมุม 45° แบบแผนผัง ไม่ใช่พิกัดภูมิศาสตร์จริง สถานะสถานีอาจเปลี่ยนไปแล้ว โปรดตรวจสอบกับ รฟท. 1690',
+    ],
+  },
+  en: {
+    title: 'Thailand Rail Map', subtitle: 'Intercity rail · drawn to true track distance',
+    search: 'Search a station or province', plan: 'Plan a journey', from: 'From station', to: 'To station', swap: 'Swap origin and destination',
+    lines: 'Lines', showHalts: 'Show halts', showFreight: 'Show freight stations', showDist: 'Show distance labels on map',
+    legend: 'Key', lgStation: 'Station', lgHalt: 'Halt', lgJunction: 'Junction / shared station', lgFreight: 'Freight station', lgFerry: 'Ferry crossing', lgDist: 'Distance between main stations',
+    fitBtn: 'All', bkkBtn: 'BKK', scaleNote: 'Line length follows rail distance', mapAria: 'Schematic map of the Thai railway network',
+    km: 'km', stations: 'stations', stops: 'stations passed', legsN: n => `${n} ${n === 1 ? 'leg' : 'legs'}`, change: 'Change at', clear: 'Clear route', zoomRoute: 'Show on map',
+    noPath: 'No rail link between these stations (the Maeklong Line is separate from the main network)', same: 'Origin and destination are the same station',
+    hintPlan: 'Pick an origin and a destination, or click a station on the map and use “Set as origin/destination”. Try:',
+    fromBkk: 'Rail distance from Bangkok (Hua Lamphong)', notLinked: 'Not linked to the main network', kmPost: 'Km post', ref: 'ref.',
+    prev: 'Previous', next: 'Next', setFrom: 'Set as origin', setTo: 'Set as destination', close: 'Close', ferry: 'Includes a ferry crossing (no distance counted)',
+    trackKm: 'km', viaFerry: 'Ferry', province: '',
+    about: [
+      'Data: intercity station register (Thailand_SRT_Stations_by_Region.xlsx), 699 stations on 24 route sections. Base list from Visitorstothailand (2019), cross-checked with Thai Tracks.',
+      'Distances use railway kilometre posts, not road distance. Each section keeps its own reference point (Hua Lamphong, Thon Buri, Wongwian Yai, Ban Laem).',
+      'Line length on the diagram is proportional to rail distance; directions are simplified to 45° and are not true geography. Station status may have changed: check with SRT (call 1690).',
+    ],
+  },
+};
+const BASE_EN = { 'กรุงเทพ (หัวลำโพง)': 'Bangkok (Hua Lamphong)', 'ธนบุรี (บางกอกน้อย)': 'Thon Buri (Bangkok Noi)', 'วงเวียนใหญ่': 'Wongwian Yai', 'บ้านแหลม': 'Ban Laem', 'กรุงเทพ (หัวลำโพง) ตามหลัก กม. สายตะวันออก': 'Bangkok (Hua Lamphong), Eastern Line posts' };
+let LANG = 'th';
+try { LANG = localStorage.getItem('thai-rail-lang') || 'th'; } catch (e) {}
+const t = k => T[LANG][k];
+const nm = s => LANG === 'en' ? s.en : s.th;
+const provName = s => LANG === 'en' ? (PROVINCES[s.prov] || s.prov) : s.prov;
+const lineName = l => LINES[l][LANG];
+const routeName = R => LANG === 'en' ? R.en : R.th;
+const fmtKm = v => {
+  const d = v < 1 ? 2 : 1;
+  return v.toLocaleString(LANG === 'th' ? 'th-TH' : 'en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+};
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+/* ---------- Build network ---------- */
+const R2 = Math.SQRT1_2;
+const DIRS = { N: [0, -1], S: [0, 1], E: [1, 0], W: [-1, 0], NE: [R2, -R2], NW: [-R2, -R2], SE: [R2, R2], SW: [-R2, R2] };
+const ST = new Map(), stations = [];
+const routes = ROUTES.map(src => {
+  const R = { ...src, sts: [] };
+  let prov = '';
+  for (const raw of src.data.trim().split('\n')) {
+    const line = raw.trim();
+    if (!line) continue;
+    if (line[0] === '@') { prov = line.slice(1); continue; }
+    const [th, en, ty, km] = line.split(';');
+    const key = th + '|' + prov;
+    let s = ST.get(key);
+    if (!s) { s = { id: stations.length, key, th, en, prov, type: ty, on: [], lines: new Set(), pos: null }; ST.set(key, s); stations.push(s); }
+    else if (s.type === 'H' && ty !== 'H') s.type = ty;
+    const e = { s, km: +km, i: R.sts.length, R };
+    s.on.push(e); R.sts.push(e);
+    src.lines.forEach(l => s.lines.add(l));
+  }
+  return R;
+});
+const byId = Object.fromEntries(routes.map(R => [R.id, R]));
+
+function octi(A, B, mode) {
+  const dx = B[0] - A[0], dy = B[1] - A[1], ax = Math.abs(dx), ay = Math.abs(dy), sx = Math.sign(dx), sy = Math.sign(dy);
+  const m = Math.min(ax, ay), st = Math.max(ax, ay) - m;
+  const sDir = ax > ay ? [sx, 0] : [0, sy];
+  const mid = mode === 'diag' ? [A[0] + sx * m, A[1] + sy * m] : [A[0] + sDir[0] * st, A[1] + sDir[1] * st];
+  const pts = [A, mid, B].filter((p, i, a) => i === 0 || Math.hypot(p[0] - a[i - 1][0], p[1] - a[i - 1][1]) > 1e-6);
+  return pts;
+}
+function layout(R) {
+  const g = R.geom, first = R.sts[0], last = R.sts[R.sts.length - 1];
+  const km0 = first.km, span = last.km - km0;
+  let pts;
+  if (g.connect) pts = octi(first.s.pos, last.s.pos, g.connect);
+  else {
+    const A = (g.start ? g.start : first.s.pos).slice();
+    pts = [A];
+    let used = 0;
+    g.segs.forEach((sg, i) => {
+      const d = DIRS[sg[0]];
+      const len = (i < g.segs.length - 1 && sg[1] != null) ? sg[1] : span - used;
+      used += len;
+      const p = pts[pts.length - 1];
+      pts.push([p[0] + d[0] * len, p[1] + d[1] * len]);
+    });
+  }
+  const segs = [];
+  let acc = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const p0 = pts[i - 1], p1 = pts[i], L = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]);
+    const dir = [(p1[0] - p0[0]) / L, (p1[1] - p0[1]) / L];
+    const side = Array.isArray(g.side) ? (g.side[i - 1] ?? 1) : (g.side ?? 1);
+    segs.push({ a0: acc, a1: acc + L, p0, p1, dir, side, norm: normalFor(dir, side) });
+    acc += L;
+  }
+  R.pts = pts; R.segs = segs; R.len = acc; R.k = span > 0 ? acc / span : 1; R.km0 = km0; R.span = span;
+  for (const e of R.sts) {
+    e.arc = (e.km - km0) * R.k;
+    const { p, si } = pointAt(R, e.arc);
+    e.seg = si;
+    if (!e.s.pos) e.s.pos = p;
+  }
+}
+function normalFor(dir, side) {
+  // default normal: positive x; for horizontal segments: up
+  let n;
+  if (Math.abs(dir[0]) < 1e-6) n = [1, 0];
+  else if (Math.abs(dir[1]) < 1e-6) n = [0, -1];
+  else { n = [-dir[1], dir[0]]; if (n[0] < 0) n = [-n[0], -n[1]]; }
+  return side < 0 ? [-n[0], -n[1]] : n;
+}
+function pointAt(R, a) {
+  const segs = R.segs;
+  let si = segs.findIndex(s => a <= s.a1 + 1e-9);
+  if (si < 0) si = segs.length - 1;
+  const s = segs[si], u = s.a1 > s.a0 ? Math.min(1, Math.max(0, (a - s.a0) / (s.a1 - s.a0))) : 0;
+  return { p: [s.p0[0] + (s.p1[0] - s.p0[0]) * u, s.p0[1] + (s.p1[1] - s.p0[1]) * u], si };
+}
+function subPath(R, a, b) {
+  if (a > b) [a, b] = [b, a];
+  const out = [pointAt(R, a).p];
+  for (const s of R.segs) if (s.a1 > a + 1e-9 && s.a1 < b - 1e-9) out.push(s.p1);
+  out.push(pointAt(R, b).p);
+  return out;
+}
+// label sides per route (see data comments)
+const SIDES = { R3: -1, R6: [-1, -1], R9: -1, R13: [-1, -1], R14: [1, -1], R16: -1, R18: [-1, 1], R21: -1, R22: -1 };
+for (const R of routes) if (SIDES[R.id] != null) R.geom.side = SIDES[R.id];
+routes.filter(R => !R.geom.connect).forEach(layout);
+routes.filter(R => R.geom.connect).forEach(layout);
+
+// ranks
+const MAJOR_SET = new Set(MAJOR);
+for (const s of stations) {
+  s.junction = s.on.length > 1;
+  s.terminus = s.on.length === 1 && (s.on[0].i === 0 || s.on[0].i === s.on[0].R.sts.length - 1);
+  s.rank = (s.junction || s.terminus || MAJOR_SET.has(s.th)) ? 0 : (s.type === 'S' || s.type === 'X') ? 1 : s.type === 'H' ? 2 : 3;
+  s.prim = s.on[0];
+}
+
+// graph
+const adj = stations.map(() => []);
+for (const R of routes) for (let i = 1; i < R.sts.length; i++) {
+  const a = R.sts[i - 1], b = R.sts[i], w = Math.abs(b.km - a.km);
+  adj[a.s.id].push({ to: b.s.id, w, R, ea: a, eb: b });
+  adj[b.s.id].push({ to: a.s.id, w, R, ea: b, eb: a });
+}
+const ferryA = ST.get(FERRY.a), ferryB = ST.get(FERRY.b);
+adj[ferryA.id].push({ to: ferryB.id, w: 0, ferry: true });
+adj[ferryB.id].push({ to: ferryA.id, w: 0, ferry: true });
+
+function dijkstra(src) {
+  const n = stations.length, dist = new Array(n).fill(Infinity), prev = new Array(n).fill(null), done = new Uint8Array(n);
+  dist[src] = 0;
+  for (;;) {
+    let u = -1, best = Infinity;
+    for (let i = 0; i < n; i++) if (!done[i] && dist[i] < best) { best = dist[i]; u = i; }
+    if (u < 0) break;
+    done[u] = 1;
+    for (const e of adj[u]) { const nd = dist[u] + e.w + (e.ferry ? 0.001 : 0); if (nd < dist[e.to] - 1e-9) { dist[e.to] = nd; prev[e.to] = { from: u, e }; } }
+  }
+  return { dist, prev };
+}
+const BKK = ST.get('กรุงเทพ|กรุงเทพมหานคร');
+const fromBkk = dijkstra(BKK.id).dist;
+
+// line stats
+const lineStats = {};
+for (const l of Object.keys(LINES)) {
+  const rs = routes.filter(R => R.lines.includes(l));
+  const set = new Set(); rs.forEach(R => R.sts.forEach(e => set.add(e.s.id)));
+  lineStats[l] = { km: rs.reduce((a, R) => a + R.span, 0), n: set.size };
+}
+
+/* ---------- State ---------- */
+const lineOn = Object.fromEntries(Object.keys(LINES).map(l => [l, true]));
+let showH = true, showF = true, showD = true;
+let selected = null, planFrom = null, planTo = null, plan = null;
+const cam = { x: 150, y: 160, z: 0.4 };
+let W = 0, H = 0, dpr = 1, fitZ = 0.4;
+
+/* ---------- Canvas ---------- */
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d'), mapEl = document.getElementById('map');
+let C = {};
+function readColors() {
+  const cs = getComputedStyle(document.documentElement);
+  C = { bg: cs.getPropertyValue('--paper').trim(), ink: cs.getPropertyValue('--ink').trim(), muted: cs.getPropertyValue('--muted').trim(), panel: cs.getPropertyValue('--panel').trim(), halo: cs.getPropertyValue('--paper').trim(), rule: cs.getPropertyValue('--rule').trim() };
+}
+const FONT = getComputedStyle(document.documentElement).getPropertyValue('--font');
+const toS = p => [(p[0] - cam.x) * cam.z + W / 2, (p[1] - cam.y) * cam.z + H / 2];
+const toW = (x, y) => [(x - W / 2) / cam.z + cam.x, (y - H / 2) / cam.z + cam.y];
+
+function offsetPoly(sp, d) {
+  if (!d) return sp;
+  const n = sp.length, out = [];
+  const segN = [];
+  for (let i = 1; i < n; i++) { const dx = sp[i][0] - sp[i - 1][0], dy = sp[i][1] - sp[i - 1][1], L = Math.hypot(dx, dy) || 1; segN.push([-dy / L, dx / L]); }
+  for (let i = 0; i < n; i++) {
+    const a = segN[Math.max(0, i - 1)], b = segN[Math.min(segN.length - 1, i)];
+    let mx = a[0] + b[0], my = a[1] + b[1]; const ml = Math.hypot(mx, my) || 1; mx /= ml; my /= ml;
+    const cos = mx * a[0] + my * a[1] || 1;
+    out.push([sp[i][0] + mx * d / cos, sp[i][1] + my * d / cos]);
+  }
+  return out;
+}
+function strokePoly(pts) { ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.stroke(); }
+
+// collision grid
+let grid;
+function gridReset() { grid = new Map(); }
+function polyAABB(P) { let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; for (const [x, y] of P) { if (x < x0) x0 = x; if (y < y0) y0 = y; if (x > x1) x1 = x; if (y > y1) y1 = y; } return [x0, y0, x1, y1]; }
+function sat(A, B) {
+  for (const P of [A, B]) for (let i = 0; i < P.length; i++) {
+    const p = P[i], q = P[(i + 1) % P.length], ax = q[1] - p[1], ay = p[0] - q[0];
+    let a0 = Infinity, a1 = -Infinity, b0 = Infinity, b1 = -Infinity;
+    for (const v of A) { const d = v[0] * ax + v[1] * ay; if (d < a0) a0 = d; if (d > a1) a1 = d; }
+    for (const v of B) { const d = v[0] * ax + v[1] * ay; if (d < b0) b0 = d; if (d > b1) b1 = d; }
+    if (a1 < b0 || b1 < a0) return false;
+  }
+  return true;
+}
+function tryPlace(P, force) {
+  const bb = polyAABB(P);
+  if (bb[2] < -50 || bb[0] > W + 50 || bb[3] < -50 || bb[1] > H + 50) return force ? true : false;
+  const cs = 80, cx0 = Math.floor(bb[0] / cs), cx1 = Math.floor(bb[2] / cs), cy0 = Math.floor(bb[1] / cs), cy1 = Math.floor(bb[3] / cs);
+  if (!force) for (let cx = cx0; cx <= cx1; cx++) for (let cy = cy0; cy <= cy1; cy++) {
+    const cell = grid.get(cx + ',' + cy); if (!cell) continue;
+    for (const Q of cell) if (sat(P, Q)) return false;
+  }
+  for (let cx = cx0; cx <= cx1; cx++) for (let cy = cy0; cy <= cy1; cy++) { const k = cx + ',' + cy; if (!grid.has(k)) grid.set(k, []); grid.get(k).push(P); }
+  return true;
+}
+const mCache = new Map();
+function measure(text, font) { const k = font + '|' + text; let w = mCache.get(k); if (w == null) { ctx.font = font; w = ctx.measureText(text).width; mCache.set(k, w); } return w; }
+
+let hits = []; // {s, x, y, r, poly}
+function visibleStation(s, z) {
+  if (![...s.lines].some(l => lineOn[l])) return false;
+  if (s.type === 'H' && !showH) return false;
+  if (s.type === 'F' && !showF) return false;
+  if (s.rank === 0) return true;
+  if (s.rank === 1) return z >= 1.3;
+  return z >= 3.2;
+}
+function labelVisible(s, z) {
+  if (s.rank === 0) return true;
+  if (s.rank === 1) return z >= 1.8;
+  return z >= 4.5;
+}
+
+function draw() {
+  raf = 0;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
+  const z = cam.z;
+  const lw = Math.max(3, Math.min(7, 2.4 + z * 0.35));
+  const pathSet = plan && plan.ok ? plan.stSet : null;
+  const dim = pathSet ? 0.22 : 1;
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+  // lines
+  for (const R of routes) {
+    const n = R.lines.length;
+    const sp = R.pts.map(toS);
+    R.lines.forEach((l, i) => {
+      if (!lineOn[l]) return;
+      ctx.globalAlpha = dim;
+      ctx.strokeStyle = LINES[l].color; ctx.lineWidth = lw;
+      strokePoly(offsetPoly(sp, (i - (n - 1) / 2) * lw));
+    });
+  }
+  // ferry
+  if (lineOn.MK) {
+    ctx.globalAlpha = dim; ctx.setLineDash([4, 4]); ctx.strokeStyle = LINES.MK.color; ctx.lineWidth = Math.max(2, lw * 0.6);
+    strokePoly([toS(ferryA.pos), toS(ferryB.pos)]); ctx.setLineDash([]);
+  }
+  ctx.globalAlpha = 1;
+
+  // highlighted path
+  if (pathSet) {
+    for (const leg of plan.legs) {
+      const col = LINES[leg.line].color;
+      for (const p of leg.parts) {
+        const sp = p.map(toS);
+        ctx.strokeStyle = col; ctx.globalAlpha = 0.25; ctx.lineWidth = lw * 3.2; strokePoly(sp);
+        ctx.globalAlpha = 1; ctx.lineWidth = lw * 1.25; strokePoly(sp);
+      }
+    }
+    if (plan.ferry) { ctx.setLineDash([5, 4]); ctx.strokeStyle = LINES.MK.color; ctx.lineWidth = lw; strokePoly([toS(ferryA.pos), toS(ferryB.pos)]); ctx.setLineDash([]); }
+  }
+
+  // markers
+  hits = [];
+  gridReset();
+  const labels = [];
+  const half = lw / 2;
+  const order = stations.slice().sort((a, b) => b.rank - a.rank);
+  for (const s of order) {
+    const onPath = pathSet && pathSet.has(s.id);
+    const isSel = selected === s;
+    if (!onPath && !isSel && !visibleStation(s, z)) continue;
+    const [x, y] = toS(s.pos);
+    if (x < -60 || x > W + 60 || y < -60 || y > H + 60) continue;
+    const e = s.prim, R = e.R, seg = R.segs[e.seg];
+    const shared = R.lines.length, wHalf = half * shared;
+    const visLine = R.lines.find(l => lineOn[l]) || R.lines[0];
+    const col = LINES[(onPath && plan.lineOf.get(s.id)) || visLine].color;
+    ctx.globalAlpha = pathSet && !onPath ? dim : 1;
+    const nrm = seg.norm;
+    let r = 0;
+    if (s.junction) {
+      r = Math.max(4.2, wHalf + 2.2) * (s.rank === 0 ? 1 : 0.85);
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = C.panel; ctx.fill(); ctx.lineWidth = 2.2; ctx.strokeStyle = C.ink; ctx.stroke();
+    } else if (s.type === 'F') {
+      const q = 4.5; r = q + 1;
+      ctx.fillStyle = C.panel; ctx.strokeStyle = C.ink; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.rect(x + nrm[0] * (wHalf + q) - q, y + nrm[1] * (wHalf + q) - q, q * 2, q * 2); ctx.fill(); ctx.stroke();
+      r = wHalf + q * 2;
+    } else {
+      const tl = s.terminus ? wHalf + 6 : s.type === 'H' ? wHalf + 3 : wHalf + 5;
+      ctx.strokeStyle = col; ctx.lineWidth = s.type === 'H' ? Math.max(1.6, lw * 0.5) : Math.max(2.2, lw * 0.72); ctx.lineCap = 'butt';
+      ctx.beginPath();
+      const back = s.terminus ? tl : 0;
+      ctx.moveTo(x - nrm[0] * back, y - nrm[1] * back); ctx.lineTo(x + nrm[0] * tl, y + nrm[1] * tl); ctx.stroke(); ctx.lineCap = 'round';
+      r = tl;
+    }
+    if (isSel) { ctx.beginPath(); ctx.arc(x, y, Math.max(9, r + 4), 0, Math.PI * 2); ctx.strokeStyle = C.ink; ctx.lineWidth = 2; ctx.setLineDash([3, 3]); ctx.stroke(); ctx.setLineDash([]); }
+    ctx.globalAlpha = 1;
+    const hit = { s, x, y, r: Math.max(r, 6), poly: null };
+    hits.push(hit);
+    if (onPath || isSel || labelVisible(s, z)) {
+      const pri = isSel ? -3 : (onPath && (s === planFrom || s === planTo)) ? -2 : onPath && (s.rank === 0 || plan.xfer.has(s.id)) ? -1 : onPath ? s.rank - 0.5 : s.rank;
+      labels.push({ s, x, y, r, nrm, seg, pri, hit, faded: pathSet && !onPath && !isSel });
+    }
+  }
+
+  // distance pills (candidates)
+  const pills = [];
+  if (pathSet) {
+    for (const leg of plan.legs) {
+      const mid = leg.mid; if (!mid) continue;
+      const [x, y] = toS(mid.p);
+      pills.push({ x, y, nrm: mid.n, txt: fmtKm(leg.km) + ' ' + t('km'), col: LINES[leg.line].color, pri: -1.5, strong: true });
+    }
+  } else if (showD) {
+    for (const R of routes) {
+      if (!R.lines.some(l => lineOn[l])) continue;
+      const keys = R.sts.filter((e, i) => i === 0 || i === R.sts.length - 1 || e.s.rank === 0);
+      for (let i = 1; i < keys.length; i++) {
+        const a = keys[i - 1], b = keys[i], dA = (b.arc - a.arc) * z;
+        if (dA < 130) continue;
+        const m = pointAt(R, (a.arc + b.arc) / 2), seg = R.segs[m.si];
+        const [x, y] = toS(m.p);
+        pills.push({ x, y, nrm: [-seg.norm[0], -seg.norm[1]], off: half * R.lines.length + 13, txt: fmtKm(b.km - a.km) + ' ' + t('km'), col: LINES[R.lines.find(l => lineOn[l])].color, pri: 0.5 });
+      }
+    }
+  }
+
+  // place labels + pills by priority
+  const items = labels.map(l => ({ k: 'L', ...l })).concat(pills.map(p => ({ k: 'P', ...p }))).sort((a, b) => a.pri - b.pri);
+  const toDraw = [];
+  for (const it of items) {
+    if (it.k === 'P') {
+      const font = '700 11px ' + FONT, w = measure(it.txt, font) + 12, h = 18;
+      const off = it.off || 14;
+      const cx = it.x + it.nrm[0] * (off + (Math.abs(it.nrm[0]) > 0.5 ? w / 2 - 6 : 0)), cy = it.y + it.nrm[1] * (off + (Math.abs(it.nrm[1]) > 0.5 ? h / 2 - 4 : 0));
+      const P = [[cx - w / 2, cy - h / 2], [cx + w / 2, cy - h / 2], [cx + w / 2, cy + h / 2], [cx - w / 2, cy + h / 2]];
+      if (tryPlace(P, it.pri < -1)) toDraw.push({ ...it, cx, cy, w, h, font });
+      continue;
+    }
+    const s = it.s;
+    const font = (s.rank === 0 || it.pri < 0 ? '600 12.5px ' : s.rank === 1 ? '500 11.5px ' : '400 10.5px ') + FONT;
+    const txt = nm(s);
+    const w = measure(txt, font), h = s.rank === 0 || it.pri < 0 ? 15 : 13;
+    const horiz = Math.abs(it.seg.dir[1]) < 1e-6;
+    const off = it.r + 4;
+    let ax = it.x + it.nrm[0] * off, ay = it.y + it.nrm[1] * off, ang = 0, x0, y0;
+    let align;
+    if (horiz) { ang = -Math.PI / 4; align = it.nrm[1] < 0 ? 'left' : 'right'; }
+    else align = it.nrm[0] > 0.01 ? 'left' : it.nrm[0] < -0.01 ? 'right' : 'center';
+    x0 = align === 'left' ? 0 : align === 'right' ? -w : -w / 2; y0 = -h / 2;
+    const c = Math.cos(ang), sn = Math.sin(ang);
+    const P = [[x0 - 2, y0], [x0 + w + 2, y0], [x0 + w + 2, y0 + h], [x0 - 2, y0 + h]].map(([px, py]) => [ax + px * c - py * sn, ay + px * sn + py * c]);
+    if (tryPlace(P, it.pri <= -2)) { toDraw.push({ ...it, ax, ay, ang, align, font, txt }); it.hit.poly = P; }
+  }
+  // draw text
+  ctx.textBaseline = 'middle';
+  for (const d of toDraw) {
+    if (d.k === 'P') {
+      ctx.globalAlpha = 1;
+      ctx.beginPath(); ctx.roundRect(d.cx - d.w / 2, d.cy - d.h / 2, d.w, d.h, d.h / 2);
+      ctx.fillStyle = d.strong ? d.col : C.panel; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = d.col; ctx.stroke();
+      ctx.font = d.font; ctx.textAlign = 'center'; ctx.fillStyle = d.strong ? '#fff' : C.ink; ctx.fillText(d.txt, d.cx, d.cy + 0.5);
+      continue;
+    }
+    ctx.save(); ctx.translate(d.ax, d.ay); ctx.rotate(d.ang);
+    ctx.font = d.font; ctx.textAlign = d.align;
+    ctx.globalAlpha = d.faded ? 0.35 : 1;
+    ctx.lineWidth = 3.5; ctx.strokeStyle = C.halo; ctx.lineJoin = 'round'; ctx.strokeText(d.txt, 0, 0.5);
+    ctx.fillStyle = d.s.rank >= 2 && d.pri >= 0 ? C.muted : C.ink; ctx.fillText(d.txt, 0, 0.5);
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+  updateScale();
+}
+let raf = 0;
+const redraw = () => { if (!raf) raf = requestAnimationFrame(draw); };
+
+function updateScale() {
+  const target = 110 / cam.z;
+  const steps = [0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500];
+  const v = steps.reduce((b, s) => s <= target ? s : b, steps[0]);
+  document.getElementById('scaleBar').style.width = (v * cam.z) + 'px';
+  document.getElementById('scaleTxt').textContent = fmtKm(v).replace(/[.,]0+$/, '') + ' ' + t('km');
+}
+
+/* ---------- Camera ---------- */
+function resize() {
+  const r = mapEl.getBoundingClientRect();
+  W = r.width; H = r.height; dpr = window.devicePixelRatio || 1;
+  cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+  redraw();
+}
+function bboxOf(list) { let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; for (const [x, y] of list) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); } return [x0, y0, x1, y1]; }
+function viewport() {
+  // visible area not covered by the bottom sheet on phones
+  const mobile = window.matchMedia('(max-width: 760px)').matches;
+  const bottom = mobile ? document.getElementById('panel').getBoundingClientRect().height : 0;
+  return { top: 0, bottom, left: 0, right: 0 };
+}
+function fitTo(bb, pad = 60, animate = true, maxZ = 40) {
+  const vp = viewport();
+  const w = Math.max(10, bb[2] - bb[0]), h = Math.max(10, bb[3] - bb[1]);
+  const aw = W - pad * 2, ah = H - vp.bottom - pad * 2;
+  const z = Math.min(maxZ, Math.max(0.05, Math.min(aw / w, ah / h)));
+  const cx = (bb[0] + bb[2]) / 2, cy = (bb[1] + bb[3]) / 2 + (vp.bottom / 2) / z;
+  flyTo(cx, cy, z, animate);
+}
+let anim = null;
+const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+function flyTo(x, y, z, animate = true) {
+  if (!animate || reduced) { cam.x = x; cam.y = y; cam.z = z; redraw(); return; }
+  const s = { ...cam }, t0 = performance.now(), D = 450;
+  cancelAnimationFrame(anim);
+  const step = now => {
+    const u = Math.min(1, (now - t0) / D), e = 1 - Math.pow(1 - u, 3);
+    const lz = Math.log(s.z) + (Math.log(z) - Math.log(s.z)) * e;
+    cam.z = Math.exp(lz); cam.x = s.x + (x - s.x) * e; cam.y = s.y + (y - s.y) * e;
+    draw();
+    if (u < 1) anim = requestAnimationFrame(step);
+  };
+  anim = requestAnimationFrame(step);
+}
+function zoomAt(sx, sy, f) {
+  const nz = Math.max(fitZ * 0.5, Math.min(60, cam.z * f));
+  const [wx, wy] = toW(sx, sy);
+  cam.z = nz;
+  cam.x = wx - (sx - W / 2) / nz; cam.y = wy - (sy - H / 2) / nz;
+  redraw();
+}
+const allBB = bboxOf(stations.map(s => s.pos));
+function fitAll(animate) {
+  const vp = viewport();
+  fitZ = Math.min((W - 80) / (allBB[2] - allBB[0]), (H - vp.bottom - 80) / (allBB[3] - allBB[1]));
+  fitTo(allBB, 70, animate);
+}
+function fitBkk() { fitTo([-40, -30, 40, 30], 30); }
+
+// pointer
+const ptrs = new Map();
+let moved = 0, pinch = null;
+cv.addEventListener('pointerdown', e => {
+  cv.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, [e.offsetX, e.offsetY]); moved = 0; cv.classList.add('drag');
+  if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), m: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] }; }
+});
+cv.addEventListener('pointermove', e => {
+  if (!ptrs.has(e.pointerId)) { hover(e.offsetX, e.offsetY); return; }
+  const p = ptrs.get(e.pointerId), dx = e.offsetX - p[0], dy = e.offsetY - p[1];
+  ptrs.set(e.pointerId, [e.offsetX, e.offsetY]);
+  if (ptrs.size === 1) { cam.x -= dx / cam.z; cam.y -= dy / cam.z; moved += Math.abs(dx) + Math.abs(dy); redraw(); }
+  else if (ptrs.size === 2 && pinch) {
+    const [a, b] = [...ptrs.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1]), m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    cam.x -= (m[0] - pinch.m[0]) / cam.z; cam.y -= (m[1] - pinch.m[1]) / cam.z;
+    zoomAt(m[0], m[1], d / pinch.d); pinch = { d, m }; moved += 10;
+  }
+});
+const up = e => {
+  if (!ptrs.has(e.pointerId)) return;
+  ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null;
+  if (!ptrs.size) { cv.classList.remove('drag'); if (moved < 6 && e.type === 'pointerup') click(e.offsetX, e.offsetY); }
+};
+cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+cv.addEventListener('wheel', e => { e.preventDefault(); zoomAt(e.offsetX, e.offsetY, Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0018))); }, { passive: false });
+cv.addEventListener('dblclick', e => zoomAt(e.offsetX, e.offsetY, 2));
+function inPoly(P, x, y) { let c = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const [xi, yi] = P[i], [xj, yj] = P[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c; } return c; }
+function hitAt(x, y) {
+  let best = null, bd = Infinity;
+  for (const h of hits) { const d = Math.hypot(h.x - x, h.y - y); if (d < Math.max(14, h.r + 6) && d < bd) { bd = d; best = h.s; } }
+  if (best) return best;
+  for (const h of hits) if (h.poly && inPoly(h.poly, x, y)) return h.s;
+  return null;
+}
+function hover(x, y) { cv.style.cursor = hitAt(x, y) ? 'pointer' : ''; }
+function click(x, y) { const s = hitAt(x, y); if (s) selectStation(s, false); else if (selected) { selected = null; renderCard(); redraw(); } }
+document.getElementById('zin').onclick = () => zoomAt(W / 2, (H - viewport().bottom) / 2, 1.6);
+document.getElementById('zout').onclick = () => zoomAt(W / 2, (H - viewport().bottom) / 2, 1 / 1.6);
+document.getElementById('fit').onclick = () => fitAll(true);
+document.getElementById('bkk').onclick = fitBkk;
+window.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.key === '+' || e.key === '=') zoomAt(W / 2, H / 2, 1.4);
+  if (e.key === '-') zoomAt(W / 2, H / 2, 1 / 1.4);
+  if (e.key === 'Escape' && selected) { selected = null; renderCard(); redraw(); }
+});
+
+/* ---------- Search / combobox ---------- */
+function search(q) {
+  q = q.trim().toLowerCase(); if (!q) return [];
+  const res = [];
+  for (const s of stations) {
+    const th = s.th.toLowerCase(), en = s.en.toLowerCase(), pv = (s.prov + ' ' + (PROVINCES[s.prov] || '')).toLowerCase();
+    const thCore = th.replace(/^ชุมทาง/, ''), enCore = en.replace(/ jn$/, '');
+    let sc = -1;
+    if (th === q || en === q) sc = 0; else if (th.startsWith(q) || thCore.startsWith(q) || en.startsWith(q) || enCore.startsWith(q)) sc = 1; else if (th.includes(q) || en.includes(q)) sc = 2; else if (pv.includes(q)) sc = 3;
+    if (sc >= 0) res.push([sc, s]);
+  }
+  return res.sort((a, b) => a[0] - b[0] || a[1].rank - b[1].rank || a[1].th.length - b[1].th.length).map(r => r[1]);
+}
+function combo(input, onPick) {
+  const list = document.createElement('ul'); list.className = 'ac'; list.hidden = true; list.setAttribute('role', 'listbox');
+  input.parentNode.appendChild(list);
+  input.setAttribute('role', 'combobox'); input.setAttribute('aria-autocomplete', 'list');
+  let items = [], act = 0;
+  const hide = () => { list.hidden = true; input.setAttribute('aria-expanded', 'false'); };
+  const render = () => {
+    items = search(input.value).slice(0, 8);
+    if (!items.length) return hide();
+    list.innerHTML = items.map((s, i) => `<li role="option" data-i="${i}" class="${i === act ? 'act' : ''}"><span class="dot" style="background:${LINES[[...s.lines][0]].color}"></span><span>${esc(nm(s))}</span><small>${esc(provName(s))}</small></li>`).join('');
+    list.hidden = false; input.setAttribute('aria-expanded', 'true');
+  };
+  const pick = s => { input.value = nm(s); hide(); onPick(s); };
+  input.addEventListener('input', () => { act = 0; render(); });
+  input.addEventListener('focus', () => { if (input.value) { act = 0; render(); } });
+  input.addEventListener('keydown', e => {
+    if (list.hidden) return;
+    if (e.key === 'ArrowDown') { act = Math.min(items.length - 1, act + 1); render(); e.preventDefault(); }
+    else if (e.key === 'ArrowUp') { act = Math.max(0, act - 1); render(); e.preventDefault(); }
+    else if (e.key === 'Enter') { if (items[act]) pick(items[act]); e.preventDefault(); }
+    else if (e.key === 'Escape') hide();
+  });
+  list.addEventListener('mousedown', e => e.preventDefault());
+  list.addEventListener('click', e => { const li = e.target.closest('li'); if (li) pick(items[+li.dataset.i]); });
+  input.addEventListener('blur', () => setTimeout(hide, 120));
+}
+const qIn = document.getElementById('q'), fromIn = document.getElementById('from'), toIn = document.getElementById('to');
+combo(qIn, s => { selectStation(s, true); qIn.blur(); });
+combo(fromIn, s => { planFrom = s; computePlan(true); });
+combo(toIn, s => { planTo = s; computePlan(true); });
+fromIn.addEventListener('input', () => { if (!fromIn.value) { planFrom = null; computePlan(); } });
+toIn.addEventListener('input', () => { if (!toIn.value) { planTo = null; computePlan(); } });
+document.getElementById('swap').onclick = () => { [planFrom, planTo] = [planTo, planFrom]; computePlan(true); };
+
+/* ---------- Planner ---------- */
+function computePlan(focus) {
+  fromIn.value = planFrom ? nm(planFrom) : '';
+  toIn.value = planTo ? nm(planTo) : '';
+  plan = null;
+  if (planFrom && planTo) {
+    if (planFrom === planTo) plan = { ok: false, msg: t('same') };
+    else {
+      const { dist, prev } = dijkstra(planFrom.id);
+      if (!isFinite(dist[planTo.id])) plan = { ok: false, msg: t('noPath') };
+      else {
+        const edges = [];
+        for (let v = planTo.id; v !== planFrom.id; v = prev[v].from) edges.unshift(prev[v].e);
+        plan = buildPlan(edges);
+      }
+    }
+  }
+  renderPlan();
+  redraw();
+  if (focus && plan && plan.ok) {
+    const pts = []; plan.legs.forEach(l => l.parts.forEach(p => pts.push(...p)));
+    fitTo(bboxOf(pts), 70);
+  }
+}
+function buildPlan(edges) {
+  const legs = []; let ferry = false;
+  const stSet = new Set([planFrom.id]), lineOf = new Map(), xfer = new Set();
+  let cur = null;
+  for (const e of edges) {
+    if (e.ferry) { ferry = true; cur = null; stSet.add(e.to); continue; }
+    stSet.add(e.to);
+    const ls = e.R.lines;
+    if (cur && cur.R === e.R) { cur.edges.push(e); }
+    else if (cur && cur.lineSet.some(l => ls.includes(l))) { cur.lineSet = cur.lineSet.filter(l => ls.includes(l)); cur.edges.push(e); }
+    else { cur = { lineSet: ls.slice(), edges: [e], R: e.R }; legs.push(cur); }
+    cur.R = e.R;
+  }
+  for (const L of legs) {
+    L.line = L.lineSet[0];
+    L.from = L.edges[0].ea.s; L.to = L.edges[L.edges.length - 1].eb.s;
+    L.km = L.edges.reduce((a, e) => a + e.w, 0);
+    L.n = L.edges.length;
+    // merge consecutive edges on same route into parts
+    L.parts = []; let run = null;
+    for (const e of L.edges) {
+      if (run && run.R === e.R) run.b = e.eb.arc; else { run = { R: e.R, a: e.ea.arc, b: e.eb.arc }; L.parts.push(run); }
+      lineOf.set(e.ea.s.id, L.line); lineOf.set(e.eb.s.id, L.line);
+    }
+    // mid point for distance pill: along the longest part
+    const lp = L.parts.reduce((a, p) => Math.abs(p.b - p.a) > Math.abs(a.b - a.a) ? p : a);
+    const m = pointAt(lp.R, (lp.a + lp.b) / 2), sg = lp.R.segs[m.si];
+    L.mid = { p: m.p, n: [-sg.norm[0], -sg.norm[1]] };
+    L.parts = L.parts.map(p => subPath(p.R, p.a, p.b));
+  }
+  for (let i = 1; i < legs.length; i++) xfer.add(legs[i].from.id);
+  return { ok: true, legs, ferry, km: legs.reduce((a, l) => a + l.km, 0), stops: edges.length, stSet, lineOf, xfer };
+}
+const EXAMPLES = [['กรุงเทพ|กรุงเทพมหานคร', 'เชียงใหม่|เชียงใหม่'], ['กรุงเทพ|กรุงเทพมหานคร', 'สุไหงโก-ลก|นราธิวาส'], ['ขอนแก่น|ขอนแก่น', 'อุบลราชธานี|อุบลราชธานี'], ['ธนบุรี|กรุงเทพมหานคร', 'น้ำตก|กาญจนบุรี'], ['พัทยา|ชลบุรี', 'หนองคาย|หนองคาย']];
+function renderPlan() {
+  const el = document.getElementById('result');
+  if (!plan) {
+    el.innerHTML = `<p class="hint">${esc(t('hintPlan'))}</p><div class="chips">${EXAMPLES.map((ex, i) => `<button class="chip" data-ex="${i}">${esc(nm(ST.get(ex[0])))} → ${esc(nm(ST.get(ex[1])))}</button>`).join('')}</div>`;
+    el.querySelectorAll('[data-ex]').forEach(b => b.onclick = () => { const ex = EXAMPLES[+b.dataset.ex]; planFrom = ST.get(ex[0]); planTo = ST.get(ex[1]); computePlan(true); });
+    return;
+  }
+  if (!plan.ok) { el.innerHTML = `<div class="result"><p class="note" style="margin:0">${esc(plan.msg)}</p><div class="row"><button class="btn" id="clr">${esc(t('clear'))}</button></div></div>`; document.getElementById('clr').onclick = clearPlan; return; }
+  let h = `<div class="result"><div class="total"><b>${fmtKm(plan.km)}</b><span>${esc(t('km'))} · ${plan.stops} ${esc(t('stops'))} · ${esc(T[LANG].legsN(plan.legs.length))}</span></div><ul class="legs">`;
+  plan.legs.forEach((L, i) => {
+    if (i > 0) h += `<li class="xfer">${esc(t('change'))} <b>${esc(nm(L.from))}</b></li>`;
+    h += `<li class="leg"><span class="bar" style="background:${LINES[L.line].color}"></span><span class="t">${esc(nm(L.from))} → ${esc(nm(L.to))}</span><span class="k">${fmtKm(L.km)} ${esc(t('km'))}</span><span class="m">${esc(lineName(L.line))} · ${L.n} ${esc(t('stations'))}</span></li>`;
+  });
+  h += `</ul>${plan.ferry ? `<p class="note" style="margin:0">⛴ ${esc(t('ferry'))}</p>` : ''}<div class="row"><button class="btn primary" id="zr">${esc(t('zoomRoute'))}</button><button class="btn" id="clr">${esc(t('clear'))}</button></div></div>`;
+  el.innerHTML = h;
+  document.getElementById('clr').onclick = clearPlan;
+  document.getElementById('zr').onclick = () => { const pts = []; plan.legs.forEach(l => l.parts.forEach(p => pts.push(...p))); fitTo(bboxOf(pts), 70); collapseSheet(); };
+}
+function clearPlan() { planFrom = planTo = null; computePlan(); }
+
+/* ---------- Station card ---------- */
+function selectStation(s, fly) {
+  selected = s; renderCard();
+  if (fly) { const z = Math.max(cam.z, s.rank === 0 ? 6 : 10); flyTo(s.pos[0], s.pos[1] + (viewport().bottom / 2) / z, z); collapseSheet(); }
+  redraw();
+}
+function renderCard() {
+  const card = document.getElementById('card');
+  const s = selected;
+  if (!s) { card.hidden = true; return; }
+  const d = fromBkk[s.id];
+  const other = LANG === 'en' ? s.th : s.en;
+  const tags = [...s.lines].map(l => `<span class="tag" style="border-color:${LINES[l].color};color:${LINES[l].color}">${esc(lineName(l))}</span>`).join('') + `<span class="tag plain">${esc(TYPES[s.type][LANG])}</span>`;
+  let h = `<div class="hd"><div><h3>${esc(nm(s))}</h3><div class="alt">${esc(other)} · ${esc(t('province'))}${esc(provName(s))}</div></div><button class="x" id="cx" aria-label="${esc(t('close'))}">×</button></div><div class="tags">${tags}</div>`;
+  h += `<div><div class="alt">${esc(t('fromBkk'))}</div><div class="big">${isFinite(d) ? `<b>${fmtKm(d)}</b><span>${esc(t('km'))}</span>` : `<span>${esc(t('notLinked'))}</span>`}</div></div>`;
+  for (const e of s.on) {
+    const R = e.R, p = R.sts[e.i - 1], n = R.sts[e.i + 1];
+    const base = LANG === 'en' ? (BASE_EN[R.base] || R.base) : R.base;
+    const nb = (x, lab) => x ? `<button data-go="${x.s.id}"><small>${esc(lab)} · ${fmtKm(Math.abs(x.km - e.km))} ${esc(t('km'))}</small>${esc(nm(x.s))}</button>` : `<button disabled><small>${esc(lab)}</small>—</button>`;
+    h += `<div class="rt"><div class="rn"><span class="dot" style="background:${LINES[R.lines[0]].color}"></span>${esc(routeName(R))}</div><div class="km">${esc(t('kmPost'))} ${e.km.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (${esc(t('ref'))} ${esc(base)})</div><div class="nb">${nb(p, t('prev'))}${nb(n, t('next'))}</div></div>`;
+  }
+  h += `<div class="row" style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" id="sf">${esc(t('setFrom'))}</button><button class="btn" id="stt">${esc(t('setTo'))}</button></div>`;
+  card.innerHTML = h; card.hidden = false;
+  card.querySelector('#cx').onclick = () => { selected = null; renderCard(); redraw(); };
+  card.querySelector('#sf').onclick = () => { planFrom = s; if (planTo === s) planTo = null; computePlan(!!planTo); };
+  card.querySelector('#stt').onclick = () => { planTo = s; if (planFrom === s) planFrom = null; computePlan(!!planFrom); };
+  card.querySelectorAll('[data-go]').forEach(b => b.onclick = () => selectStation(stations[+b.dataset.go], true));
+}
+
+/* ---------- Lines list, options, language ---------- */
+function renderLines() {
+  document.getElementById('lines').innerHTML = Object.keys(LINES).map(l => `<li><label><input type="checkbox" data-line="${l}" ${lineOn[l] ? 'checked' : ''}><span class="sw" style="background:${LINES[l].color}"></span><span class="nm">${esc(lineName(l))}</span><span class="st">${fmtKm(lineStats[l].km).replace(/[.,]\d$/, '')} ${esc(t('km'))} · ${lineStats[l].n} ${esc(t('stations'))}</span></label></li>`).join('');
+  document.querySelectorAll('[data-line]').forEach(cb => cb.onchange = () => { lineOn[cb.dataset.line] = cb.checked; redraw(); });
+}
+document.getElementById('optH').onchange = e => { showH = e.target.checked; redraw(); };
+document.getElementById('optF').onchange = e => { showF = e.target.checked; redraw(); };
+document.getElementById('optD').onchange = e => { showD = e.target.checked; redraw(); };
+function applyLang() {
+  document.documentElement.lang = LANG;
+  document.title = t('title');
+  document.querySelectorAll('[data-i18n]').forEach(el => el.textContent = t(el.dataset.i18n));
+  document.querySelectorAll('[data-i18n-ph]').forEach(el => el.placeholder = t(el.dataset.i18nPh));
+  document.querySelectorAll('[data-i18n-aria]').forEach(el => el.setAttribute('aria-label', t(el.dataset.i18nAria)));
+  document.querySelectorAll('[data-lang]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.lang === LANG)));
+  document.getElementById('about').innerHTML = t('about').map(p => `<p>${esc(p)}</p>`).join('');
+  qIn.value = selected ? nm(selected) : '';
+  renderLines(); computePlan(false); renderCard(); redraw();
+}
+document.querySelectorAll('[data-lang]').forEach(b => b.onclick = () => { LANG = b.dataset.lang; try { localStorage.setItem('thai-rail-lang', LANG); } catch (e) {} applyLang(); });
+
+/* ---------- Mobile sheet ---------- */
+const panel = document.getElementById('panel');
+document.getElementById('handle').onclick = () => panel.classList.toggle('open');
+function collapseSheet() { panel.classList.remove('open'); }
+[qIn, fromIn, toIn].forEach(i => i.addEventListener('focus', () => { if (window.matchMedia('(max-width: 760px)').matches) panel.classList.add('open'); }));
+
+/* ---------- Theme ---------- */
+readColors();
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { readColors(); redraw(); });
+new MutationObserver(() => { readColors(); redraw(); }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+/* ---------- Start ---------- */
+new ResizeObserver(() => { const first = !W; resize(); if (first) fitAll(false); }).observe(mapEl);
+applyLang();
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { mCache.clear(); redraw(); });
+})();
+</script>
+</body>
+</html>
