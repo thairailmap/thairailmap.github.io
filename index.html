@@ -99,6 +99,11 @@ section { display: flex; flex-direction: column; }
 .opts label { display: flex; gap: 8px; align-items: center; cursor: pointer; }
 .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; font-size: 12.5px; }
 .legend div { display: flex; gap: 8px; align-items: center; }
+.dl { display: flex; gap: 12px; align-items: center; padding: 12px 14px; border-radius: 12px; background: var(--ink); color: var(--panel); text-decoration: none; }
+.dl:hover { opacity: 0.9; }
+.dl span { display: flex; flex-direction: column; }
+.dl b { font-size: 14px; }
+.dl small { font-size: 12px; opacity: 0.75; }
 .about { font-size: 12px; color: var(--muted); border-top: 1px solid var(--rule); padding-top: 14px; }
 .about p { margin: 0 0 6px; }
 
@@ -200,6 +205,14 @@ section { display: flex; flex-direction: column; }
     </div>
   </section>
 
+  <section>
+    <h2 data-i18n="poster"></h2>
+    <a class="dl" href="thai-rail-map-A0.pdf" download="thai-rail-map-A0.pdf">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3v10M6 9l4 4 4-4M4 16h12"/></svg>
+      <span><b data-i18n="dlBtn"></b><small data-i18n="dlNote"></small></span>
+    </a>
+  </section>
+
   <div class="about" id="about"></div>
 </aside>
 
@@ -233,6 +246,7 @@ const T = {
     fromBkk: 'ระยะทางรถไฟจากกรุงเทพ (หัวลำโพง)', notLinked: 'ไม่เชื่อมกับโครงข่ายหลัก', kmPost: 'หลัก กม.', ref: 'อ้างอิง',
     prev: 'ก่อนหน้า', next: 'ถัดไป', setFrom: 'ตั้งเป็นต้นทาง', setTo: 'ตั้งเป็นปลายทาง', close: 'ปิด', ferry: 'รวมช่วงข้ามเรือ (ไม่นับระยะทาง)',
     trackKm: 'กม.', viaFerry: 'ข้ามเรือ', province: 'จ.',
+    poster: 'โปสเตอร์สำหรับพิมพ์', dlBtn: 'ดาวน์โหลดโปสเตอร์ PDF', dlNote: 'ขนาด A0 · ชื่อครบ 699 สถานี · 170 KB',
     about: [
       'ข้อมูล: ทะเบียนสถานีรถไฟระหว่างเมือง (ไฟล์ Thailand_SRT_Stations_by_Region.xlsx) 699 สถานี 24 เส้นทางย่อย ฐานข้อมูลหลักปี 2562 จาก Visitorstothailand ตรวจทานกับ Thai Tracks',
       'ระยะทางคิดจากหลักกิโลเมตรทางรถไฟ ไม่ใช่ระยะทางถนน แต่ละเส้นทางย่อยใช้จุดอ้างอิงของตัวเอง (หัวลำโพง ธนบุรี วงเวียนใหญ่ บ้านแหลม)',
@@ -251,6 +265,7 @@ const T = {
     fromBkk: 'Rail distance from Bangkok (Hua Lamphong)', notLinked: 'Not linked to the main network', kmPost: 'Km post', ref: 'ref.',
     prev: 'Previous', next: 'Next', setFrom: 'Set as origin', setTo: 'Set as destination', close: 'Close', ferry: 'Includes a ferry crossing (no distance counted)',
     trackKm: 'km', viaFerry: 'Ferry', province: '',
+    poster: 'Printable poster', dlBtn: 'Download poster PDF', dlNote: 'A0 size · all 699 stations (Thai) · 170 KB',
     about: [
       'Data: intercity station register (Thailand_SRT_Stations_by_Region.xlsx), 699 stations on 24 route sections. Base list from Visitorstothailand (2019), cross-checked with Thai Tracks.',
       'Distances use railway kilometre posts, not road distance. Each section keeps its own reference point (Hua Lamphong, Thon Buri, Wongwian Yai, Ban Laem).',
